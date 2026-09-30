@@ -26,6 +26,25 @@ try {
     assert.match(content, new RegExp(`line-${index}`));
   }
   assert.equal((content.match(/line-/g) ?? []).length, 30);
+
+  await callTool(server.port, "vault_create_note", {
+    path: "98-Inbox/concurrent-edits.md",
+    content: "first\nsecond\n"
+  });
+  await Promise.all([
+    callTool(server.port, "vault_edit", {
+      path: "98-Inbox/concurrent-edits.md",
+      edits: [{ oldText: "first", newText: "changed-first" }]
+    }),
+    callTool(server.port, "vault_edit", {
+      path: "98-Inbox/concurrent-edits.md",
+      edits: [{ oldText: "second", newText: "changed-second" }]
+    })
+  ]);
+  assert.equal(
+    await readFile(path.join(server.vault, "98-Inbox", "concurrent-edits.md"), "utf8"),
+    "changed-first\nchanged-second\n"
+  );
   console.log("concurrency ok");
 } finally {
   await server.close();

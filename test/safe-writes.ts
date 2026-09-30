@@ -12,6 +12,7 @@ try {
   await assertStrictInputValidation();
   await assertRawByteRevision();
   await assertCreateReplaceAndConflicts();
+  await assertExactTextEdits();
   await assertAppendAndPatchConflicts();
   await assertDeleteConflict();
   await assertAtomicOverwriteMove();
@@ -99,6 +100,35 @@ async function assertCreateReplaceAndConflicts(): Promise<void> {
     expectedSha256: current.revision.sha256
   });
   assert.equal(replaced.revision.sha256, sha256(Buffer.from("safe replacement\n")));
+}
+
+async function assertExactTextEdits(): Promise<void> {
+  const file = path.join(server.vault, "98-Inbox", "edit.md");
+  await writeFile(file, "alpha\nbeta\ngamma\n", "utf8");
+  await callTool(server.port, "vault_edit", {
+    path: "98-Inbox/edit.md",
+    edits: [
+      { oldText: "alpha", newText: "first" },
+      { oldText: "gamma", newText: "last" }
+    ]
+  });
+  assert.equal(await readFile(file, "utf8"), "first\nbeta\nlast\n");
+
+  await expectDomainError("vault_edit", {
+    path: "98-Inbox/edit.md",
+    edits: [
+      { oldText: "beta", newText: "changed" },
+      { oldText: "missing", newText: "never written" }
+    ]
+  }, "CONTENT_CONFLICT");
+  assert.equal(await readFile(file, "utf8"), "first\nbeta\nlast\n");
+
+  await writeFile(file, "repeat repeat\n", "utf8");
+  await expectDomainError("vault_edit", {
+    path: "98-Inbox/edit.md",
+    edits: [{ oldText: "repeat", newText: "changed" }]
+  }, "CONTENT_CONFLICT");
+  assert.equal(await readFile(file, "utf8"), "repeat repeat\n");
 }
 
 async function assertAppendAndPatchConflicts(): Promise<void> {

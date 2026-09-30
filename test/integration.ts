@@ -219,6 +219,7 @@ async function testToolDiscovery(port: number): Promise<void> {
     "vault_write",
     "vault_create_note",
     "vault_replace_note",
+    "vault_edit",
     "vault_append",
     "vault_patch",
     "vault_delete",

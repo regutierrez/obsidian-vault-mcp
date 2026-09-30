@@ -49,6 +49,7 @@ export type Config = {
   maxRequestBytes: number;
   readOnly: boolean;
   enableVaultWrite: boolean;
+  enableVaultUpsert: boolean;
   enableVaultAppend: boolean;
   enableVaultPatch: boolean;
   enableVaultDelete: boolean;
@@ -96,6 +97,7 @@ export const config: Config = {
   maxRequestBytes: intEnv("MAX_REQUEST_BYTES", 16 * 1024 * 1024),
   readOnly: boolEnv("READ_ONLY", false),
   enableVaultWrite: boolEnv("ENABLE_VAULT_WRITE", true),
+  enableVaultUpsert: boolEnv("ENABLE_VAULT_UPSERT", true),
   enableVaultAppend: boolEnv("ENABLE_VAULT_APPEND", true),
   enableVaultPatch: boolEnv("ENABLE_VAULT_PATCH", true),
   enableVaultDelete: boolEnv("ENABLE_VAULT_DELETE", true),

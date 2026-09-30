@@ -44,6 +44,7 @@ try {
   assert(toolNames.includes("vault_write"));
   assert(toolNames.includes("vault_create_note"));
   assert(toolNames.includes("vault_replace_note"));
+  assert(toolNames.includes("vault_edit"));
   assert(toolNames.includes("vault_delete"));
   assert(toolNames.includes("search_simple"));
   for (const tool of tools.tools) {
@@ -57,6 +58,7 @@ try {
     vault_write: annotations(false, true, false),
     vault_create_note: annotations(false, false, true),
     vault_replace_note: annotations(false, true, true),
+    vault_edit: annotations(false, true, true),
     vault_append: annotations(false, false, false),
     vault_create_directory: annotations(false, false, true),
     vault_patch: annotations(false, true, false),

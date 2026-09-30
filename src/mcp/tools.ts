@@ -651,6 +651,38 @@ export function buildTools(vault: FsVault): Tool[] {
       ))
     },
     {
+      name: "vault_edit",
+      title: "Vault Edit",
+      description: "Apply exact, unique, non-overlapping text replacements to an existing Markdown note. All replacements are validated against the same original content before one atomic write.",
+      annotations: destructiveIdempotentAnnotations,
+      inputSchema: {
+        type: "object",
+        properties: {
+          path: mdPath,
+          edits: {
+            type: "array",
+            minItems: 1,
+            items: {
+              type: "object",
+              properties: {
+                oldText: { type: "string", minLength: 1 },
+                newText: { type: "string" }
+              },
+              required: ["oldText", "newText"],
+              additionalProperties: false
+            }
+          }
+        },
+        required: ["path", "edits"],
+        additionalProperties: false
+      },
+      outputSchema: localFileMutationOutputSchema,
+      handler: async (args) => localMutationSuccess(await vault.edit(
+        args.path as string,
+        args.edits as Array<{ oldText: string; newText: string }>
+      ))
+    },
+    {
       name: "vault_append",
       title: "Vault Append",
       description: "Append Markdown content to a note, creating the Markdown file if missing. expectedSha256 checks the current raw file bytes when supplied. The parent directory must already exist.",
@@ -1147,7 +1179,8 @@ function mutationOutputSchema(
 
 function toolEnabled(name: string): boolean {
   if (!config.readOnly) {
-    if (name === "vault_write" || name === "vault_create_note" || name === "vault_replace_note") return config.enableVaultWrite;
+    if (name === "vault_write") return config.enableVaultWrite && config.enableVaultUpsert;
+    if (name === "vault_create_note" || name === "vault_replace_note" || name === "vault_edit") return config.enableVaultWrite;
     if (name === "vault_append") return config.enableVaultAppend;
     if (name === "vault_patch") return config.enableVaultPatch;
     if (name === "vault_delete") return config.enableVaultDelete;
@@ -1163,6 +1196,7 @@ function toolEnabled(name: string): boolean {
     "vault_write",
     "vault_create_note",
     "vault_replace_note",
+    "vault_edit",
     "vault_append",
     "vault_patch",
     "vault_delete",

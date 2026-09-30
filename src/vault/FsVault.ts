@@ -38,6 +38,11 @@ export type LocalFileMutationResult = {
   revision: FileRevision;
 };
 
+export type TextEdit = {
+  oldText: string;
+  newText: string;
+};
+
 export type ImportedVaultFileResult = {
   path: string;
   revision: FileRevision;
@@ -220,6 +225,56 @@ export class FsVault {
         return { path: relative, revision };
       } catch (error) {
         await audit("vault_replace_note", "failure", { path: relative, error: errorMessage(error) });
+        throw error;
+      }
+    });
+  }
+
+  async edit(filePath: string, edits: TextEdit[]): Promise<LocalFileMutationResult> {
+    const relative = this.guard.validateFilePath(filePath);
+    return this.locks.withLock([relative], async () => {
+      try {
+        const absolute = await this.guard.resolveExisting(relative);
+        const content = await readFile(absolute, "utf8");
+        const replacements = edits.map((edit, index) => {
+          if (edit.oldText.length === 0) {
+            throw new ToolDomainError("INVALID_ARGUMENT", `edits[${index}].oldText must not be empty`);
+          }
+          const start = content.indexOf(edit.oldText);
+          if (start === -1) {
+            throw new ToolDomainError("CONTENT_CONFLICT", `edits[${index}].oldText was not found: ${relative}`, {
+              details: { path: relative, editIndex: index }
+            });
+          }
+          if (content.indexOf(edit.oldText, start + edit.oldText.length) !== -1) {
+            throw new ToolDomainError("CONTENT_CONFLICT", `edits[${index}].oldText is not unique: ${relative}`, {
+              details: { path: relative, editIndex: index }
+            });
+          }
+          return { ...edit, start, end: start + edit.oldText.length, index };
+        }).sort((left, right) => left.start - right.start);
+
+        for (let index = 1; index < replacements.length; index += 1) {
+          const previous = replacements[index - 1];
+          const current = replacements[index];
+          if (previous && current && current.start < previous.end) {
+            throw new ToolDomainError("CONTENT_CONFLICT", "edits must not overlap", {
+              details: { path: relative, editIndexes: [previous.index, current.index] }
+            });
+          }
+        }
+
+        let next = content;
+        for (const replacement of [...replacements].reverse()) {
+          next = `${next.slice(0, replacement.start)}${replacement.newText}${next.slice(replacement.end)}`;
+        }
+        await this.backupExisting(relative, "vault_edit");
+        await atomicWriteFile(absolute, next);
+        const revision = await revisionForPath(absolute);
+        await audit("vault_edit", "success", { path: relative, edits: edits.length, sha256: revision.sha256 });
+        return { path: relative, revision };
+      } catch (error) {
+        await audit("vault_edit", "failure", { path: relative, error: errorMessage(error) });
         throw error;
       }
     });
