@@ -1,5 +1,12 @@
 # Obsidian Vault MCP
 
+> **Fork note:** This is a personal fork of [3011/obsidian-vault-mcp](https://github.com/3011/obsidian-vault-mcp). Use the `homelab` branch; `main` tracks upstream. The fork adds two things:
+>
+> - `vault_edit`, which applies exact-text replacements safely, and a switch to turn off the unrestricted upsert.
+> - A better `search_simple`. The upstream version matched the whole query as one exact string and returned the first notes it found, with no total. Everyday questions missed notes that used different wording, and repetitive daily notes filled the results. This fork's search matches words and simple word variants. It ranks titles and aliases highest, shows excerpts and the reasons each note matched, reports `total`/`hasMore` for paging, and can filter by path, tag, and date.
+>
+> To update from upstream, rebase `homelab` onto `3011/obsidian-vault-mcp` `main` and run `npm test`.
+
 [中文文档](README.zh-CN.md)
 
 Headless Obsidian Vault MCP server backed by a normal Markdown vault directory.
