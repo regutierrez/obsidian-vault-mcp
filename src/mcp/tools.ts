@@ -1,5 +1,5 @@
 import { config } from "../config.js";
-import { FsVault } from "../vault/FsVault.js";
+import { FsVault, type SearchSimpleOptions } from "../vault/FsVault.js";
 import { embeddedResourceResult, type Tool, type ToolAnnotations } from "./types.js";
 import { openAIFileSchema, VaultFileTransferManager } from "./fileTransfer.js";
 
@@ -262,19 +262,31 @@ const searchSimpleOutputSchema = {
                   required: ["start", "end", "source"],
                   additionalProperties: false
                 },
-                context: { type: "string" }
+                context: { type: "string" },
+                heading: { type: "string" },
+                terms: stringArraySchema
               },
               required: ["match", "context"],
               additionalProperties: false
             }
-          }
+          },
+          title: { type: "string" },
+          date: { type: "string" },
+          tags: stringArraySchema,
+          matchedTerms: stringArraySchema,
+          reasons: stringArraySchema
         },
-        required: ["filename", "score", "matches"],
+        required: ["filename", "score", "matches", "title", "date", "tags", "matchedTerms", "reasons"],
         additionalProperties: false
       }
-    }
+    },
+    total: { type: "integer", minimum: 0 },
+    offset: { type: "integer", minimum: 0 },
+    limit: { type: "integer", minimum: 1 },
+    hasMore: { type: "boolean" },
+    nextOffset: { type: "integer", minimum: 0 }
   },
-  required: ["result"],
+  required: ["result", "total", "offset", "limit", "hasMore"],
   additionalProperties: false
 };
 
@@ -895,20 +907,33 @@ export function buildTools(vault: FsVault): Tool[] {
     {
       name: "search_simple",
       title: "Search Simple",
-      description: "Search Markdown note paths and contents with a case-insensitive substring search, returning snippets with context.",
+      description: "Ranked word search over Markdown notes. Each query word is optional, and notes matching more words rank higher. Words are case-insensitive and match simple variants (claim, claimed, claiming). Put alternative wordings in one query, for example \"poll response claim race\". Quote a phrase, or join words with a hyphen, to require adjacent words. Rare words count more. Matches in titles and aliases rank above matches only in body text; path, tag, and heading matches add a smaller boost. Notes containing the exact query text always match. Each result has excerpts from its best-matching sections, matched terms, and reasons. total, hasMore, and nextOffset show whether more results exist; pass nextOffset as offset to get the next page.",
       annotations: readOnlyAnnotations,
       outputSchema: searchSimpleOutputSchema,
       inputSchema: {
         type: "object",
         properties: {
-          query: { type: "string", description: "Case-insensitive substring to search for in Markdown paths and note contents." },
-          contextLength: { type: "number", default: 100, description: "Approximate number of characters to include around each content match." },
-          limit: { type: "number", default: 100, description: "Maximum number of matches to return." }
+          query: { type: "string", description: "Words, alternative wordings, or quoted phrases to search for in note titles, aliases, paths, tags, headings, and contents." },
+          contextLength: { type: "number", default: 100, description: "Approximate number of characters to include around each excerpt." },
+          limit: { type: "number", default: 100, description: "Maximum number of notes to return in this page, up to 500." },
+          offset: { type: "number", default: 0, description: "Number of ranked notes to skip. Use nextOffset from the previous page." },
+          pathGlob: { type: "string", description: "Optional glob for vault-relative Markdown paths, for example akkio/** or 00 Capture/*.md." },
+          tag: { type: "string", description: "Optional tag filter, with or without leading #. A parent tag also matches nested tags, so tech matches tech/temporal." },
+          after: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$", description: "Optional inclusive YYYY-MM-DD lower bound on the note date: frontmatter created or date, else a date in the filename, else modification time." },
+          before: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$", description: "Optional inclusive YYYY-MM-DD upper bound on the note date." }
         },
         required: ["query"],
         additionalProperties: false
       },
-      handler: async (args) => vault.searchSimple(args.query as string, (args.contextLength as number | undefined) ?? 100, (args.limit as number | undefined) ?? 100)
+      handler: async (args) => {
+        const options: SearchSimpleOptions = {};
+        if (typeof args.offset === "number") options.offset = args.offset;
+        if (typeof args.pathGlob === "string") options.pathGlob = args.pathGlob;
+        if (typeof args.tag === "string") options.tag = args.tag;
+        if (typeof args.after === "string") options.after = args.after;
+        if (typeof args.before === "string") options.before = args.before;
+        return vault.searchSimple(args.query as string, (args.contextLength as number | undefined) ?? 100, (args.limit as number | undefined) ?? 100, options);
+      }
     },
     {
       name: "search_query",

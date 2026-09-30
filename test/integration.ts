@@ -645,11 +645,17 @@ line ^block-a
 
 async function testSearchAndTags(port: number): Promise<void> {
   const search = await callTool(port, "search_simple", { query: "needle", limit: 5 });
-  const fixture = search.find((item: any) => item.filename === "98-Inbox/fixture.md");
+  assert.equal(search.offset, 0);
+  assert.equal(search.limit, 5);
+  assert.equal(search.hasMore, search.total > search.result.length);
+  const fixture = search.result.find((item: any) => item.filename === "98-Inbox/fixture.md");
   assert(fixture);
-  assert.equal(fixture.matches.length, 2);
+  assert(fixture.matches.some((match: any) => match.match.source === "content" && /needle one/.test(match.context)));
   const filenameSearch = await callTool(port, "search_simple", { query: "fixture" });
-  assert(filenameSearch.some((item: any) => item.matches.some((match: any) => match.match.source === "filename")));
+  assert(filenameSearch.result.some((item: any) => item.matches.some((match: any) => match.match.source === "filename")));
+  const filteredSearch = await callTool(port, "search_simple", { query: "needle alpha", pathGlob: "98-Inbox/**", tag: "project", after: "2000-01-01", offset: 0, limit: 1 });
+  assert.equal(filteredSearch.result[0]?.filename, "98-Inbox/fixture.md");
+  await expectInvalidArguments(port, "search_simple", { query: "needle", after: "yesterday" }, /after/);
 
   const querySearch = await callTool(port, "search_query", {
     pathGlob: "98-Inbox/**",

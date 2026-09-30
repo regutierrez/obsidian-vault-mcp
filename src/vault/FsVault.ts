@@ -11,12 +11,21 @@ import { MutationJournal, type OperationStatus, type PendingMutation } from "./m
 import { getDocumentMap } from "../markdown/documentMap.js";
 import { frontmatterTags, parseFrontmatter } from "../markdown/frontmatter.js";
 import { patchMarkdown, type PatchArgs } from "../markdown/patch.js";
+import { buildSearchNote, rankNotes, type SearchNote, type SearchSimpleResult } from "./search.js";
 
 export type ExternalReference = {
   label: string;
   location: string;
   type?: string;
   note?: string;
+};
+
+export type SearchSimpleOptions = {
+  offset?: number;
+  pathGlob?: string;
+  tag?: string;
+  after?: string;
+  before?: string;
 };
 
 export type SearchQueryArgs = {
@@ -700,41 +709,25 @@ export class FsVault {
     return { headings: map.headings, blocks: map.blocks, frontmatterFields: map.frontmatterFields, links: map.links, embeds: map.embeds, tags: map.tags };
   }
 
-  async searchSimple(query: string, contextLength = 100, limit = 100): Promise<unknown[]> {
+  async searchSimple(query: string, contextLength = 100, limit = 100, options: SearchSimpleOptions = {}): Promise<SearchSimpleResult> {
     if (!query?.trim()) throw new Error("query is required");
     const boundedContext = Math.max(0, Math.min(Number.isFinite(contextLength) ? contextLength : 100, 1000));
-    const boundedLimit = Math.max(1, Math.min(Number.isFinite(limit) ? limit : 100, 500));
-    const needle = query.toLowerCase();
-    const results: unknown[] = [];
+    const boundedLimit = Math.max(1, Math.min(Number.isFinite(limit) ? Math.floor(limit) : 100, 500));
+    const boundedOffset = Math.max(0, Number.isFinite(options.offset) ? Math.floor(Number(options.offset)) : 0);
+    const pathRegexp = options.pathGlob?.trim() ? globToRegExp(options.pathGlob.trim()) : undefined;
+    const tag = options.tag?.trim().replace(/^#/, "");
+    const notes: SearchNote[] = [];
     for await (const relative of this.walkMarkdown()) {
+      if (pathRegexp && !pathRegexp.test(relative)) continue;
       const absolute = this.guard.resolveCreate(relative);
-      const content = await readFile(absolute, "utf8");
-      const basename = path.posix.basename(relative, ".md");
-      const prefix = `${basename}\n\n`;
-      const haystack = `${prefix}${content}`;
-      const lower = haystack.toLowerCase();
-      const matches: Array<{ match: { start: number; end: number; source: "filename" | "content" }; context: string }> = [];
-      let index = lower.indexOf(needle);
-      while (index >= 0) {
-        const source = index < basename.length ? "filename" : "content";
-        const start = source === "filename" ? index : index - prefix.length;
-        const end = start + query.length;
-        matches.push({
-          match: { start, end, source },
-          context: haystack.slice(Math.max(0, index - boundedContext), index + query.length + boundedContext)
-        });
-        index = lower.indexOf(needle, index + Math.max(needle.length, 1));
-      }
-      if (matches.length === 0) continue;
-      results.push({
-        filename: relative,
-        score: matches.length + query.length / Math.max(haystack.length, 1),
-        matches
-      });
-      if (results.length >= boundedLimit) break;
+      const [content, fileStat] = await Promise.all([readFile(absolute, "utf8"), stat(absolute)]);
+      const note = buildSearchNote(relative, content, fileStat.mtimeMs);
+      if (tag && !note.tags.some((item) => item === tag || item.startsWith(`${tag}/`))) continue;
+      if (options.after && note.date < options.after) continue;
+      if (options.before && note.date > options.before) continue;
+      notes.push(note);
     }
-    results.sort((a: any, b: any) => (b.score ?? 0) - (a.score ?? 0));
-    return results;
+    return rankNotes(notes, query, boundedContext, boundedOffset, boundedLimit);
   }
 
   async searchQuery(args: SearchQueryArgs): Promise<unknown[]> {
