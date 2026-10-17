@@ -39,7 +39,7 @@
   },
   "dependencies": {
     "ajv": "^8.20.0",
-    "fast-uri": "3.1.7",
+    "fast-uri": "^3.1.8",
     "markdown-patch": "^1.0.0",
     "yaml": "^2.9.0"
   }
